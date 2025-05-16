@@ -34,7 +34,20 @@ export type GenerateVideoMetadataOutput = z.infer<typeof GenerateVideoMetadataOu
 export async function generateVideoMetadata(
   input: GenerateVideoMetadataInput
 ): Promise<GenerateVideoMetadataOutput> {
-  return generateVideoMetadataFlow(input);
+  console.log('generateVideoMetadata flow called with input:', { 
+    hasVideoDataUri: !!input.videoDataUri, 
+    videoDescriptionLength: input.videoDescription?.length 
+  });
+  try {
+    const result = await generateVideoMetadataFlow(input);
+    console.log('generateVideoMetadata flow succeeded.');
+    return result;
+  } catch (error) {
+    console.error('Error in generateVideoMetadata flow:', error);
+    // Re-throw the error to be caught by the client or higher-level error handlers
+    // Potentially transform into a more user-friendly error or specific error type
+    throw new Error(`AI metadata generation failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 const generateVideoMetadataPrompt = ai.definePrompt({
@@ -67,7 +80,19 @@ const generateVideoMetadataFlow = ai.defineFlow(
     outputSchema: GenerateVideoMetadataOutputSchema,
   },
   async input => {
-    const {output} = await generateVideoMetadataPrompt(input);
-    return output!;
+    try {
+      const {output} = await generateVideoMetadataPrompt(input);
+      if (!output) {
+        console.error('generateVideoMetadataPrompt returned undefined output');
+        throw new Error('AI prompt did not return an output.');
+      }
+      return output;
+    } catch (flowError) {
+      console.error('Error executing generateVideoMetadataPrompt:', flowError);
+      // It's important to re-throw or handle the error appropriately
+      // so the calling function (generateVideoMetadata wrapper) can catch it.
+      throw flowError; 
+    }
   }
 );
+
