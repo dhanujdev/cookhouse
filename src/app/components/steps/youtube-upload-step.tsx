@@ -52,18 +52,25 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
   }, [toast]);
 
   const handleAuthenticate = () => {
-    if (!clientId || !redirectUriPath) {
+    if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE' || !redirectUriPath) {
       toast({
         title: 'Configuration Error',
-        description: 'YouTube Client ID or Redirect URI is not configured. Please check .env file.',
+        description: 'YouTube Client ID or Redirect URI is not configured correctly. Please check your .env file and ensure you have replaced placeholders with actual values.',
         variant: 'destructive',
       });
+      console.error('YouTube Client ID or Redirect URI is not configured. NEXT_PUBLIC_YOUTUBE_CLIENT_ID:', clientId, 'NEXT_PUBLIC_YOUTUBE_REDIRECT_URI:', redirectUriPath);
       return;
     }
     setIsAuthenticating(true);
     setAuthError(null);
     const redirectUri = `${window.location.origin}${redirectUriPath}`;
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(YOUTUBE_UPLOAD_SCOPE)}&include_granted_scopes=true`;
+    
+    console.log('Attempting to authenticate with URL:', authUrl);
+    console.log('Ensure your Google Cloud Console OAuth Client ID has this EXACT redirect URI:', redirectUri);
+    console.log('And this Client ID:', clientId);
+    console.log('And that Authorized JavaScript Origins includes:', window.location.origin);
+
     window.location.href = authUrl;
   };
 
@@ -155,7 +162,7 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
     onReset(); // Call the parent's reset function
   }
 
-  if (!clientId) {
+  if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
      return (
       <Card className="w-full shadow-lg">
         <CardHeader>
@@ -165,12 +172,17 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
         </CardHeader>
         <CardContent>
           <p className="text-destructive-foreground">
-            YouTube Client ID is not configured. Please set <code>NEXT_PUBLIC_YOUTUBE_CLIENT_ID</code> in your <code>.env</code> file.
+            YouTube Client ID is not configured or is still a placeholder. Please set <code>NEXT_PUBLIC_YOUTUBE_CLIENT_ID</code> in your <code>.env</code> file with your actual Client ID.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
             Make sure to also configure Authorized JavaScript origins and Redirect URIs in your Google Cloud Console.
           </p>
         </CardContent>
+         <CardFooter className="justify-center">
+          <Button variant="outline" onClick={handleResetFlow} className="w-full sm:w-auto">
+            Reset / Start Over
+          </Button>
+      </CardFooter>
       </Card>
     );
   }
@@ -261,3 +273,4 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
   );
 }
 
+    
