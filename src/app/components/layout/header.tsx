@@ -1,6 +1,8 @@
+
 "use client";
-import { Video } from 'lucide-react';
+import { Video, Settings } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export default function AppHeader() {
   return (
@@ -10,7 +12,12 @@ export default function AppHeader() {
           <Video className="h-8 w-8" />
           <h1 className="text-2xl font-semibold">VidTune</h1>
         </Link>
-        {/* Future navigation items can go here */}
+        
+        <Link href="/settings" passHref>
+          <Button variant="ghost" size="icon" aria-label="Settings" className="text-accent-foreground hover:bg-accent/80">
+            <Settings className="h-6 w-6" />
+          </Button>
+        </Link>
       </div>
     </header>
   );

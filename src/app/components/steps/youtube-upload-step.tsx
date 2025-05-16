@@ -7,19 +7,23 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Youtube, Loader2, CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import type { Metadata } from '@/types'; // Assuming Metadata type includes title, description, tags
+import type { Metadata } from '@/types'; 
 
 interface YouTubeUploadStepProps {
   videoFile: File | null;
   metadata: Metadata | null;
   onUploadComplete: (url: string) => void;
-  onReset: () => void; // To reset the flow
+  onReset: () => void; 
   disabled?: boolean;
 }
 
 const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
-// You might need more scopes depending on what you want to do, e.g., managing videos:
-// const YOUTUBE_PARTNER_SCOPE = "https://www.googleapis.com/auth/youtubepartner";
+const SETTINGS_STORAGE_KEY = 'vidtune_app_settings';
+
+interface AppSettings {
+  youtubeClientId: string;
+  googleAiApiKey: string; // Not used in this component, but part of the settings structure
+}
 
 export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplete, onReset, disabled }: YouTubeUploadStepProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -27,22 +31,33 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [effectiveClientId, setEffectiveClientId] = useState<string | null>(process.env.NEXT_PUBLIC_YOUTUBE_CLIENT_ID || null);
   const { toast } = useToast();
 
-  const clientId = process.env.NEXT_PUBLIC_YOUTUBE_CLIENT_ID;
   const redirectUriPath = process.env.NEXT_PUBLIC_YOUTUBE_REDIRECT_URI;
 
   useEffect(() => {
+    // Load YouTube Client ID from localStorage if available, otherwise use .env
+    const storedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    let clientIdFromStorage: string | null = null;
+    if (storedSettings) {
+      try {
+        const settings: AppSettings = JSON.parse(storedSettings);
+        if (settings.youtubeClientId) {
+          clientIdFromStorage = settings.youtubeClientId;
+        }
+      } catch (error) {
+        console.error("Failed to parse settings from localStorage for Client ID", error);
+      }
+    }
+    setEffectiveClientId(clientIdFromStorage || process.env.NEXT_PUBLIC_YOUTUBE_CLIENT_ID || null);
+
     // Check for access token or error from localStorage on mount
     const storedToken = localStorage.getItem('youtube_access_token');
     const storedError = localStorage.getItem('youtube_auth_error');
 
     if (storedToken) {
       setAccessToken(storedToken);
-      // It's good practice to remove the token from localStorage after retrieving it 
-      // if it's short-lived or if you handle refresh tokens securely elsewhere.
-      // For this example, we'll keep it for session persistence until explicit logout/reset.
-      // localStorage.removeItem('youtube_access_token'); 
     }
     if (storedError) {
       setAuthError(storedError);
@@ -52,23 +67,23 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
   }, [toast]);
 
   const handleAuthenticate = () => {
-    if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE' || !redirectUriPath) {
+    if (!effectiveClientId || effectiveClientId === 'YOUR_GOOGLE_CLIENT_ID_HERE' || !redirectUriPath) {
       toast({
         title: 'Configuration Error',
-        description: 'YouTube Client ID or Redirect URI is not configured correctly. Please check your .env file and ensure you have replaced placeholders with actual values.',
+        description: 'YouTube Client ID or Redirect URI is not configured correctly. Please check your .env file or the in-app Settings page, and ensure you have replaced placeholders with actual values.',
         variant: 'destructive',
       });
-      console.error('YouTube Client ID or Redirect URI is not configured. NEXT_PUBLIC_YOUTUBE_CLIENT_ID:', clientId, 'NEXT_PUBLIC_YOUTUBE_REDIRECT_URI:', redirectUriPath);
+      console.error('YouTube Client ID or Redirect URI is not configured. Effective Client ID:', effectiveClientId, 'NEXT_PUBLIC_YOUTUBE_REDIRECT_URI:', redirectUriPath);
       return;
     }
     setIsAuthenticating(true);
     setAuthError(null);
     const redirectUri = `${window.location.origin}${redirectUriPath}`;
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(YOUTUBE_UPLOAD_SCOPE)}&include_granted_scopes=true`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${effectiveClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(YOUTUBE_UPLOAD_SCOPE)}&include_granted_scopes=true`;
     
     console.log('Attempting to authenticate with URL:', authUrl);
     console.log('Ensure your Google Cloud Console OAuth Client ID has this EXACT redirect URI:', redirectUri);
-    console.log('And this Client ID:', clientId);
+    console.log('And this Client ID:', effectiveClientId);
     console.log('And that Authorized JavaScript Origins includes:', window.location.origin);
 
     window.location.href = authUrl;
@@ -92,12 +107,12 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
         title: metadata.title,
         description: metadata.description,
         tags: metadata.tags,
-        categoryId: "22", // "People & Blogs". You might want to make this configurable.
-                         // List: https://developers.google.com/youtube/v3/docs/videoCategories/list
+        categoryId: "22", 
+        // List: https://developers.google.com/youtube/v3/docs/videoCategories/list
       },
       status: {
-        privacyStatus: "private", // Or "public", "unlisted". Make configurable.
-        selfDeclaredMadeForKids: false, // Important for Coppa compliance
+        privacyStatus: "private", 
+        selfDeclaredMadeForKids: false,
       },
     };
 
@@ -110,7 +125,6 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          // 'Content-Type' is set automatically by FormData for multipart
         },
         body: formData,
       });
@@ -128,10 +142,10 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
       } else {
         console.error('YouTube API Error:', result);
         const errorMessage = result.error?.message || 'Failed to upload video to YouTube.';
-        setAuthError(errorMessage); // Could be an auth error (e.g. token expired) or other API error
-        if (response.status === 401) { // Unauthorized
-             localStorage.removeItem('youtube_access_token'); // Clear potentially bad token
-             setAccessToken(null); // Force re-auth
+        setAuthError(errorMessage); 
+        if (response.status === 401) { 
+             localStorage.removeItem('youtube_access_token'); 
+             setAccessToken(null); 
              toast({ title: 'Authentication Error', description: 'Your session may have expired. Please authenticate again.', variant: 'destructive' });
         } else {
             toast({ title: 'Upload Failed', description: errorMessage, variant: 'destructive' });
@@ -154,15 +168,16 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
   const handleResetFlow = () => {
     localStorage.removeItem('youtube_access_token');
     localStorage.removeItem('youtube_auth_error');
+    // Do not clear SETTINGS_STORAGE_KEY here, only auth tokens
     setAccessToken(null);
     setAuthError(null);
     setUploadedUrl(null);
     setIsLoading(false);
     setIsAuthenticating(false);
-    onReset(); // Call the parent's reset function
+    onReset(); 
   }
 
-  if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
+  if (!effectiveClientId || effectiveClientId === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
      return (
       <Card className="w-full shadow-lg">
         <CardHeader>
@@ -172,10 +187,10 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
         </CardHeader>
         <CardContent>
           <p className="text-destructive-foreground">
-            YouTube Client ID is not configured or is still a placeholder. Please set <code>NEXT_PUBLIC_YOUTUBE_CLIENT_ID</code> in your <code>.env</code> file with your actual Client ID.
+            YouTube Client ID is not configured or is still a placeholder. Please set <code>NEXT_PUBLIC_YOUTUBE_CLIENT_ID</code> in your <code>.env</code> file, or set it on the <Link href="/settings" className="underline">Settings page</Link>.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Make sure to also configure Authorized JavaScript origins and Redirect URIs in your Google Cloud Console.
+            Make sure to also configure Authorized JavaScript origins and Redirect URIs in your Google Cloud Console for the Client ID you are using.
           </p>
         </CardContent>
          <CardFooter className="justify-center">
@@ -272,5 +287,3 @@ export default function YouTubeUploadStep({ videoFile, metadata, onUploadComplet
     </Card>
   );
 }
-
-    
