@@ -48,6 +48,14 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
       });
       return;
     }
+    if (!videoSummary.trim() && !videoFile) { // Keep summary as optional, but video is mandatory
+      toast({
+        title: 'Input Required',
+        description: 'Please provide a video file. A summary is optional but helpful.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -67,7 +75,7 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
       console.error('Error generating metadata:', error);
       toast({
         title: 'Generation Failed',
-        description: 'Could not generate metadata. Please try a shorter or smaller video file, or simplify the video summary.',
+        description: 'Could not generate metadata. Please ensure the video is not too long and try again.',
         variant: 'destructive',
       });
     } finally {
@@ -177,4 +185,3 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
     </Card>
   );
 }
-
