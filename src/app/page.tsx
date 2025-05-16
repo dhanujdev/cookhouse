@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState } from 'react';
 import type { AudioTrack, Metadata, Step } from '@/types';
-import { generateVideoMetadata } from '@/ai/flows/generate-video-metadata';
+// Removed unused import: import { generateVideoMetadata } from '@/ai/flows/generate-video-metadata';
 
 import VideoUploadStep from './components/steps/video-upload-step';
 import AudioSelectionStep from './components/steps/audio-selection-step';
@@ -87,7 +88,8 @@ export default function VidTunePage() {
         )}
         
         {currentStep === 3 && (
-          <MetadataGenerationStep 
+          <MetadataGenerationStep
+            videoFile={videoFile} 
             onMetadataGenerated={handleMetadataGenerated}
             initialMetadata={generatedMetadata}
             disabled={isStepDisabled(3) || !selectedAudio}

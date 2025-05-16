@@ -1,3 +1,4 @@
+
 "use client";
 import type React from 'react';
 import { useState } from 'react';
@@ -12,12 +13,24 @@ import { generateVideoMetadata, type GenerateVideoMetadataOutput } from '@/ai/fl
 import { Badge } from '@/components/ui/badge';
 
 interface MetadataGenerationStepProps {
+  videoFile: File | null;
   onMetadataGenerated: (metadata: GenerateVideoMetadataOutput) => void;
   initialMetadata?: GenerateVideoMetadataOutput | null;
   disabled?: boolean;
 }
 
-export default function MetadataGenerationStep({ onMetadataGenerated, initialMetadata, disabled }: MetadataGenerationStepProps) {
+const fileToDataUri = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(reader.result as string);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+export default function MetadataGenerationStep({ videoFile, onMetadataGenerated, initialMetadata, disabled }: MetadataGenerationStepProps) {
   const [videoSummary, setVideoSummary] = useState('');
   const [title, setTitle] = useState(initialMetadata?.title || '');
   const [description, setDescription] = useState(initialMetadata?.description || '');
@@ -27,29 +40,42 @@ export default function MetadataGenerationStep({ onMetadataGenerated, initialMet
   const { toast } = useToast();
 
   const handleGenerateMetadata = async () => {
-    if (!videoSummary.trim()) {
+    if (!videoFile) {
       toast({
-        title: 'Video Summary Required',
-        description: 'Please provide a brief summary of your video content.',
+        title: 'Video File Required',
+        description: 'A video file must be selected to generate metadata.',
         variant: 'destructive',
       });
       return;
     }
+    if (!videoSummary.trim() && !videoFile) { // Keep summary as optional, but video is mandatory
+      toast({
+        title: 'Input Required',
+        description: 'Please provide a video file. A summary is optional but helpful.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      const result = await generateVideoMetadata({ videoDescription: videoSummary });
+      const videoDataUri = await fileToDataUri(videoFile);
+      const result = await generateVideoMetadata({ 
+        videoDataUri, 
+        videoDescription: videoSummary.trim() || undefined 
+      });
       setTitle(result.title);
       setDescription(result.description);
       setTags(result.tags);
       toast({
         title: 'Metadata Generated',
-        description: 'AI has generated title, description, and tags for your video.',
+        description: 'AI has generated title, description, and tags based on your video content.',
       });
     } catch (error) {
       console.error('Error generating metadata:', error);
       toast({
         title: 'Generation Failed',
-        description: 'Could not generate metadata. Please try again.',
+        description: 'Could not generate metadata. Please ensure the video is not too long and try again.',
         variant: 'destructive',
       });
     } finally {
@@ -87,11 +113,11 @@ export default function MetadataGenerationStep({ onMetadataGenerated, initialMet
           <Wand2 className="h-6 w-6 text-accent" />
           <CardTitle>Step 3: Generate Metadata</CardTitle>
         </div>
-        <CardDescription>Provide a video summary for AI, then review or edit the generated metadata.</CardDescription>
+        <CardDescription>The AI will analyze your video content. You can optionally add a summary to provide more context, then review or edit the generated metadata.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="video-summary">Video Content Summary</Label>
+          <Label htmlFor="video-summary">Video Content Summary (Optional)</Label>
           <Textarea
             id="video-summary"
             placeholder="e.g., A tutorial on how to bake a chocolate cake, featuring tips for beginners and common mistakes..."
@@ -100,8 +126,16 @@ export default function MetadataGenerationStep({ onMetadataGenerated, initialMet
             className="min-h-[100px]"
             disabled={disabled || isLoading}
           />
+           <p className="text-xs text-muted-foreground">
+            The AI will primarily analyze the video frames. This summary can provide additional context or highlight key points.
+          </p>
         </div>
-        <Button onClick={handleGenerateMetadata} disabled={disabled || isLoading || !videoSummary.trim()} className="w-full sm:w-auto">
+        <Button 
+          onClick={handleGenerateMetadata} 
+          disabled={disabled || isLoading || !videoFile} 
+          className="w-full sm:w-auto"
+          aria-label={!videoFile ? "Upload a video first to enable metadata generation" : "Generate metadata with AI"}
+        >
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
           Generate with AI
         </Button>
@@ -139,7 +173,7 @@ export default function MetadataGenerationStep({ onMetadataGenerated, initialMet
                 </Badge>
               ))}
             </div>
-             {tags.length === 0 && <p className="text-sm text-muted-foreground">No tags added yet.</p>}
+             {tags.length === 0 && <p className="text-sm text-muted-foreground">No tags added yet. AI will generate these.</p>}
           </div>
         </div>
       </CardContent>

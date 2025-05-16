@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Generates video metadata (title, description, tags) using AI.
@@ -11,9 +12,15 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateVideoMetadataInputSchema = z.object({
+  videoDataUri: z
+    .string()
+    .describe(
+      "The video content, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+    ),
   videoDescription: z
     .string()
-    .describe('A description of the video content, including scene context and key moments.'),
+    .optional()
+    .describe('An optional user-provided summary of the video content, including scene context and key moments.'),
 });
 export type GenerateVideoMetadataInput = z.infer<typeof GenerateVideoMetadataInputSchema>;
 
@@ -36,14 +43,21 @@ const generateVideoMetadataPrompt = ai.definePrompt({
   output: {schema: GenerateVideoMetadataOutputSchema},
   prompt: `You are an expert in creating engaging and SEO-optimized metadata for YouTube videos.
 
-  Based on the video description provided, generate a title, description, and tags that will maximize the video's discoverability.
+  You will be provided with direct access to the video content and an optional user-provided summary. Analyze the video content (frames, scenes, and implied narrative or information) as the primary source. Use the user-provided summary as supplementary context if available.
 
-  Description:
+  Generate a title, description, and tags that will maximize the video's discoverability.
+
+  Video Content:
+  {{media url=videoDataUri}}
+
+  User-provided Summary (optional):
+  {{#if videoDescription}}
   {{videoDescription}}
+  {{else}}
+  No user summary provided. Rely solely on video content.
+  {{/if}}
 
-  Title:
-  Description (2-3 short paragraphs):
-  Tags (10-15 tags, separated by commas):`,
+  Output the title, description (2-3 short paragraphs), and tags (10-15 tags).`,
 });
 
 const generateVideoMetadataFlow = ai.defineFlow(
