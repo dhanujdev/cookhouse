@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface MetadataGenerationStepProps {
   videoFile: File | null;
-  videoFileDetails: { name: string; type: string; size: number } | null; // To know if a video was selected, even if File object is lost
+  videoFileDetails: { name: string; type: string; size: number } | null;
   onMetadataGenerated: (metadata: GenerateVideoMetadataOutput) => void;
   initialMetadata?: GenerateVideoMetadataOutput | null;
   disabled?: boolean;
@@ -48,10 +48,9 @@ export default function MetadataGenerationStep({ videoFile, videoFileDetails, on
       setDescription(initialMetadata.description);
       setTags(initialMetadata.tags);
       if (initialMetadata.title || initialMetadata.description || initialMetadata.tags.length > 0) {
-        setHasGeneratedOnce(true); // If there's initial data, assume it was generated
+        setHasGeneratedOnce(true); 
       }
     } else {
-      // Reset if initialMetadata becomes null (e.g. flow reset)
       setTitle('');
       setDescription('');
       setTags([]);
@@ -61,7 +60,7 @@ export default function MetadataGenerationStep({ videoFile, videoFileDetails, on
 
 
   const handleGenerateMetadata = async () => {
-    if (!videoFile && !videoFileDetails) { // Check both actual file and details
+    if (!videoFile && !videoFileDetails) { 
       toast({
         title: 'Video File Required',
         description: 'A video file must be selected to generate metadata.',
@@ -69,7 +68,7 @@ export default function MetadataGenerationStep({ videoFile, videoFileDetails, on
       });
       return;
     }
-    if (!videoFile && videoFileDetails) { // File object lost, but details exist
+    if (!videoFile && videoFileDetails) { 
        toast({
         title: 'Video File Lost',
         description: `The video file "${videoFileDetails.name}" needs to be re-selected. Please go to Step 1.`,
@@ -80,7 +79,6 @@ export default function MetadataGenerationStep({ videoFile, videoFileDetails, on
     
     setIsLoading(true);
     try {
-      // videoFile is checked above, so it must exist here
       const videoDataUri = await fileToDataUri(videoFile!); 
       const result = await generateVideoMetadata({ 
         videoDataUri, 
@@ -147,7 +145,7 @@ export default function MetadataGenerationStep({ videoFile, videoFileDetails, on
       </CardHeader>
       <CardContent className="space-y-6">
         {videoObjectMissing && (
-          <Alert variant="warning" className="mb-4">
+          <Alert variant="warning" className="mb-4"> {/* Changed from destructive to warning */}
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Video File Action Required</AlertTitle>
             <AlertDescription>

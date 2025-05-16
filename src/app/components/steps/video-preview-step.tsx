@@ -9,11 +9,11 @@ import type { AudioTrack, Metadata } from '@/types';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Added AlertTitle
 
 interface VideoPreviewStepProps {
   videoFile: File | null;
-  videoFileDetails: { name: string; type: string; size: number } | null; // For placeholder if File object is lost
+  videoFileDetails: { name: string; type: string; size: number } | null; 
   selectedAudio: AudioTrack | null;
   metadata: Metadata | null;
   onConfirmPreview: () => void;
@@ -36,10 +36,11 @@ export default function VideoPreviewStep({ videoFile, videoFileDetails, selected
       </CardHeader>
       <CardContent className="space-y-6">
         {videoObjectMissing && (
-          <Alert variant="warning">
+          <Alert variant="warning"> {/* Changed from destructive to warning */}
             <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Video Preview Unavailable</AlertTitle>
             <AlertDescription>
-              Video preview is unavailable as the file ({videoFileDetails?.name}) needs to be re-selected at Step 1. Your audio and metadata choices are shown below.
+              The video preview is unavailable because the file ({videoFileDetails?.name}) needs to be re-selected at Step 1. Your audio and metadata choices are shown below.
             </AlertDescription>
           </Alert>
         )}
