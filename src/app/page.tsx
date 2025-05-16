@@ -15,10 +15,10 @@ import { UploadCloud, Music2, Wand2, PlayCircle, Youtube as YoutubeIcon, Edit3, 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
-const APP_STEPS: Step[] = [
+const INITIAL_APP_STEPS: Step[] = [
   { id: 1, name: 'Upload Video', icon: UploadCloud },
   { id: 2, name: 'Select Audio', icon: Music2 },
-  { id: 3, name: 'Gen. Metadata', icon: Wand2 }, // Initial name
+  { id: 3, name: 'Gen. Metadata', icon: Wand2 }, // Default name
   { id: 4, name: 'Preview', icon: PlayCircle },
   { id: 5, name: 'Publish', icon: YoutubeIcon },
 ];
@@ -42,12 +42,11 @@ export default function VidTunePage() {
   const [selectedAudio, setSelectedAudio] = useState<AudioTrack | null>(null);
   const [generatedMetadata, setGeneratedMetadata] = useState<Metadata | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
-  const [appSteps, setAppSteps] = useState<Step[]>(APP_STEPS);
+  const [appSteps, setAppSteps] = useState<Step[]>(INITIAL_APP_STEPS);
   const [showVideoMissingWarning, setShowVideoMissingWarning] = useState(false);
 
 
   useEffect(() => {
-    // Load state from localStorage on initial mount
     const storedStateString = localStorage.getItem(LOCAL_STORAGE_APP_STATE_KEY);
     if (storedStateString) {
       try {
@@ -57,35 +56,51 @@ export default function VidTunePage() {
         setSelectedAudio(storedState.selectedAudio);
         setGeneratedMetadata(storedState.generatedMetadata);
         setYoutubeUrl(storedState.youtubeUrl);
-        setPersistedVideoFileDetails(storedState.videoFileDetails);
+        setPersistedVideoFileDetails(storedState.videoFileDetails); // Restore details
 
-        if (storedState.currentStep === 5 && storedState.videoFileDetails && !videoFile) {
-          // If we are supposed to be on step 5, and we had video details, but no file object (lost in redirect)
+        // Check if we need to show the "video file lost" warning
+        // This happens if we are on step 5, an access token exists (meaning auth happened),
+        // we had video details, but the videoFile object itself is now null.
+        if (
+          storedState.currentStep === 5 &&
+          !videoFile && // videoFile state would be null initially after page load
+          storedState.videoFileDetails &&
+          storedState.completedSteps.includes(4) && // Ensure they actually reached step 4
+          localStorage.getItem('youtube_access_token') // Check if auth was likely successful
+        ) {
           setShowVideoMissingWarning(true);
         }
-        
       } catch (error) {
         console.error("Failed to parse app state from localStorage", error);
       }
-      localStorage.removeItem(LOCAL_STORAGE_APP_STATE_KEY); // Clear after loading
+      localStorage.removeItem(LOCAL_STORAGE_APP_STATE_KEY); 
     }
 
-    localStorage.removeItem('youtube_auth_error'); // Clear any old auth errors
-    if (currentStep === 1 && !localStorage.getItem('youtube_access_token')) { // Only clear token if truly starting over
-      localStorage.removeItem('youtube_access_token');
+    localStorage.removeItem('youtube_auth_error');
+    // Only clear token if truly starting over and no token was found during load.
+    // If a token is present, it might be from the just-completed OAuth flow.
+    if (currentStep === 1 && !localStorage.getItem('youtube_access_token')) {
+        localStorage.removeItem('youtube_access_token');
     }
+
   }, []); // Runs once on mount
-
 
   useEffect(() => {
     // Update step 3 name/icon based on metadata status
-    const metadataExists = generatedMetadata !== null;
+    const metadataExists = generatedMetadata !== null && (generatedMetadata.title !== '' || generatedMetadata.description !== '' || generatedMetadata.tags.length > 0);
     setAppSteps(prevSteps => prevSteps.map(step => 
       step.id === 3 
         ? { ...step, name: metadataExists ? 'Edit Metadata' : 'Gen. Metadata', icon: metadataExists ? Edit3 : Wand2 }
         : step
     ));
   }, [generatedMetadata]);
+
+  // Hide warning if videoFile becomes available (e.g., re-selected)
+  useEffect(() => {
+    if (videoFile) {
+      setShowVideoMissingWarning(false);
+    }
+  }, [videoFile]);
 
 
   const saveAppStateToLocalStorage = () => {
@@ -100,7 +115,6 @@ export default function VidTunePage() {
     localStorage.setItem(LOCAL_STORAGE_APP_STATE_KEY, JSON.stringify(stateToSave));
   };
   
-
   const resetToStep1 = (clearToken = true) => {
     setCurrentStep(1);
     setCompletedSteps([]);
@@ -117,13 +131,12 @@ export default function VidTunePage() {
     localStorage.removeItem(LOCAL_STORAGE_APP_STATE_KEY);
   };
 
-
   const handleVideoUploaded = (file: File) => {
     setVideoFile(file);
     setPersistedVideoFileDetails({ name: file.name, type: file.type, size: file.size });
-    setCompletedSteps(prev => [...new Set([...prev, 1])]);
-    setCurrentStep(2);
-    setShowVideoMissingWarning(false);
+    setCompletedSteps(prev => [...new Set([...prev, 1])]); // Mark step 1 as complete
+    setCurrentStep(2); // Proceed to step 2
+    setShowVideoMissingWarning(false); // Hide warning if it was shown
   };
 
   const handleAudioSelected = (track: AudioTrack) => {
@@ -146,30 +159,36 @@ export default function VidTunePage() {
   const handleUploadComplete = (url: string) => {
     setYoutubeUrl(url);
     setCompletedSteps(prev => [...new Set([...prev, 5])]);
+    localStorage.removeItem('youtube_access_token'); // Clean up token after successful use
   };
   
-  const getStepDisabledState = (stepId: number): boolean => {
-    if (completedSteps.includes(5) && youtubeUrl) return stepId !== 5; // If finished and URL exists, only final step is "active"
-
-    switch (stepId) {
-      case 1: return false; 
-      case 2: return !completedSteps.includes(1) && !videoFile && !persistedVideoFileDetails;
-      case 3: return !completedSteps.includes(2) && !selectedAudio;
-      case 4: return !completedSteps.includes(3) && !generatedMetadata;
-      case 5: return !completedSteps.includes(4);
-      default: return true;
-    }
-  }
-  
-  const handleNavigateToStep1 = () => {
-    // Keep selectedAudio and generatedMetadata, but reset to step 1 for video re-selection
-    setCurrentStep(1);
-    setCompletedSteps([]); // Reset completed steps to force re-completion from step 1
-    setVideoFile(null); 
-    // persistedVideoFileDetails remains to show the name of the file they had
+  // This function is specifically for when the user clicks the button in the "video missing" warning.
+  const handleNavigateToStep1ForReselection = () => {
     setShowVideoMissingWarning(false);
+    // videoFile is already null
+    // persistedVideoFileDetails, selectedAudio, generatedMetadata are kept.
+    // youtubeUrl is kept (though upload didn't happen yet).
+    // Access token is kept.
+    setCompletedSteps([]); // User needs to re-confirm steps with the new video file.
+    setCurrentStep(1);
   };
 
+  const getStepDisabledState = (stepId: number): boolean => {
+    if (completedSteps.includes(5) && youtubeUrl) return stepId !== 5; 
+
+    // If video is missing after auth, only allow step 1 or showing step 5 (which will show warning)
+    if (showVideoMissingWarning && stepId !== 1 && stepId !== 5) return true;
+
+
+    // Standard progression logic
+    if (stepId === 1) return false; // Always allow step 1 unless flow is complete or specific warning
+    if (stepId === 2) return !completedSteps.includes(1) && !persistedVideoFileDetails;
+    if (stepId === 3) return !completedSteps.includes(2) && !selectedAudio;
+    if (stepId === 4) return !completedSteps.includes(3) && !generatedMetadata;
+    if (stepId === 5) return !completedSteps.includes(4);
+    
+    return true; // Default to disabled for unhandled cases
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -180,12 +199,12 @@ export default function VidTunePage() {
         {showVideoMissingWarning && currentStep === 5 && (
           <Alert variant="destructive" className="mb-4">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Video File Needed for Upload</AlertTitle>
+            <AlertTitle>Video File Re-selection Needed</AlertTitle>
             <AlertDescription>
-              Authentication was successful. However, the video file needs to be re-selected due to the page redirect.
-              Your audio and metadata selections have been preserved.
-              <Button onClick={handleNavigateToStep1} variant="link" className="p-0 h-auto ml-1 text-destructive-foreground hover:underline">
-                Click here to go to Step 1 and re-select your video: {persistedVideoFileDetails?.name || "your video"}.
+              Authentication was successful. However, the video file ({persistedVideoFileDetails?.name || "your video"}) needs to be re-selected due to the page redirect. 
+              Your audio and metadata choices have been preserved.
+              <Button onClick={handleNavigateToStep1ForReselection} variant="link" className="p-0 h-auto ml-1 text-destructive-foreground hover:underline">
+                Click here to go to Step 1 and re-select your video.
               </Button>
             </AlertDescription>
           </Alert>
@@ -208,8 +227,8 @@ export default function VidTunePage() {
         
         {currentStep === 3 && (persistedVideoFileDetails || videoFile) && selectedAudio && (
           <MetadataGenerationStep
-            videoFile={videoFile} // Pass current videoFile, which might be null after redirect
-            videoFileDetails={persistedVideoFileDetails} // Pass details for AI if file object is lost
+            videoFile={videoFile}
+            videoFileDetails={persistedVideoFileDetails}
             onMetadataGenerated={handleMetadataGenerated}
             initialMetadata={generatedMetadata}
             disabled={getStepDisabledState(3)}
@@ -218,8 +237,8 @@ export default function VidTunePage() {
 
         {currentStep === 4 && (persistedVideoFileDetails || videoFile) && selectedAudio && generatedMetadata && (
           <VideoPreviewStep 
-            videoFile={videoFile} // Pass current videoFile
-            videoFileDetails={persistedVideoFileDetails} // Pass details for placeholder if file object is lost
+            videoFile={videoFile}
+            videoFileDetails={persistedVideoFileDetails}
             selectedAudio={selectedAudio}
             metadata={generatedMetadata}
             onConfirmPreview={handleConfirmPreview}
@@ -229,16 +248,18 @@ export default function VidTunePage() {
 
         {currentStep === 5 && (persistedVideoFileDetails || videoFile) && selectedAudio && generatedMetadata && (
            <YouTubeUploadStep 
-            videoFile={videoFile} // Pass current videoFile
-            videoFileDetails={persistedVideoFileDetails} // Pass details
+            videoFile={videoFile}
+            videoFileDetails={persistedVideoFileDetails}
             metadata={generatedMetadata}
             onUploadComplete={handleUploadComplete}
-            onReset={() => resetToStep1(true)} // Full reset clears token
+            onReset={() => resetToStep1(true)} 
             onPrepareOAuth={saveAppStateToLocalStorage}
-            disabled={getStepDisabledState(5) || (!videoFile && !!persistedVideoFileDetails)} // Disable if videoFile object is missing but was expected
+            disabled={getStepDisabledState(5) || showVideoMissingWarning || (!videoFile && !!persistedVideoFileDetails)}
           />
         )}
       </div>
     </div>
   );
 }
+
+    
