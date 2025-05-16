@@ -1,6 +1,7 @@
+
 "use client";
 import type React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,12 +21,17 @@ const royaltyFreeTracks: AudioTrack[] = [
 
 interface AudioSelectionStepProps {
   onAudioSelected: (track: AudioTrack) => void;
+  initialSelectedAudioTrack?: AudioTrack | null;
   disabled?: boolean;
 }
 
-export default function AudioSelectionStep({ onAudioSelected, disabled }: AudioSelectionStepProps) {
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+export default function AudioSelectionStep({ onAudioSelected, initialSelectedAudioTrack, disabled }: AudioSelectionStepProps) {
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(initialSelectedAudioTrack?.id || null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setSelectedTrackId(initialSelectedAudioTrack?.id || null);
+  }, [initialSelectedAudioTrack]);
 
   const handleSelectTrack = (trackId: string) => {
     setSelectedTrackId(trackId);

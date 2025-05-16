@@ -1,27 +1,29 @@
+
 "use client";
 
 import type React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlayCircle, Music2, FileText, Tag } from 'lucide-react';
+import { PlayCircle, Music2, FileText, Tag, AlertTriangle } from 'lucide-react';
 import type { AudioTrack, Metadata } from '@/types';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface VideoPreviewStepProps {
   videoFile: File | null;
+  videoFileDetails: { name: string; type: string; size: number } | null; // For placeholder if File object is lost
   selectedAudio: AudioTrack | null;
   metadata: Metadata | null;
   onConfirmPreview: () => void;
   disabled?: boolean;
 }
 
-export default function VideoPreviewStep({ videoFile, selectedAudio, metadata, onConfirmPreview, disabled }: VideoPreviewStepProps) {
+export default function VideoPreviewStep({ videoFile, videoFileDetails, selectedAudio, metadata, onConfirmPreview, disabled }: VideoPreviewStepProps) {
   
-  // In a real app, videoUrl would come from processing or be a blob URL
-  const videoUrl = videoFile ? URL.createObjectURL(videoFile) : "https://placehold.co/600x400.png";
-
+  const videoUrl = videoFile ? URL.createObjectURL(videoFile) : "https://placehold.co/600x400.png?text=Video+Preview+Unavailable";
+  const videoObjectMissing = !videoFile && !!videoFileDetails;
 
   return (
     <Card className="w-full shadow-lg">
@@ -33,11 +35,19 @@ export default function VideoPreviewStep({ videoFile, selectedAudio, metadata, o
         <CardDescription>Review your video with selected audio and generated metadata.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {videoObjectMissing && (
+          <Alert variant="warning">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Video preview is unavailable as the file ({videoFileDetails?.name}) needs to be re-selected at Step 1. Your audio and metadata choices are shown below.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="aspect-video bg-muted rounded-md overflow-hidden flex items-center justify-center">
           {videoFile ? (
              <video controls src={videoUrl} className="w-full h-full object-contain" data-ai-hint="video player"></video>
           ) : (
-            <Image src={videoUrl} alt="Video placeholder" width={600} height={400} data-ai-hint="video placeholder" className="w-full h-full object-cover" />
+            <Image src={videoUrl} alt={videoObjectMissing ? `Placeholder for ${videoFileDetails?.name}` : "Video placeholder"} width={600} height={400} data-ai-hint="video placeholder" className="w-full h-full object-cover" />
           )}
         </div>
         
@@ -73,7 +83,7 @@ export default function VideoPreviewStep({ videoFile, selectedAudio, metadata, o
         )}
       </CardContent>
       <CardFooter>
-        <Button onClick={onConfirmPreview} disabled={disabled} className="w-full sm:w-auto">
+        <Button onClick={onConfirmPreview} disabled={disabled || videoObjectMissing} className="w-full sm:w-auto">
           Looks Good, Proceed to Upload
         </Button>
       </CardFooter>

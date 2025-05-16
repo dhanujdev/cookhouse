@@ -1,19 +1,21 @@
 
 "use client";
 import type React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Wand2, Loader2, Tag } from 'lucide-react';
+import { Wand2, Loader2, Tag, RotateCcw, Edit3, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateVideoMetadata, type GenerateVideoMetadataOutput } from '@/ai/flows/generate-video-metadata';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface MetadataGenerationStepProps {
   videoFile: File | null;
+  videoFileDetails: { name: string; type: string; size: number } | null; // To know if a video was selected, even if File object is lost
   onMetadataGenerated: (metadata: GenerateVideoMetadataOutput) => void;
   initialMetadata?: GenerateVideoMetadataOutput | null;
   disabled?: boolean;
@@ -30,17 +32,36 @@ const fileToDataUri = (file: File): Promise<string> => {
   });
 };
 
-export default function MetadataGenerationStep({ videoFile, onMetadataGenerated, initialMetadata, disabled }: MetadataGenerationStepProps) {
+export default function MetadataGenerationStep({ videoFile, videoFileDetails, onMetadataGenerated, initialMetadata, disabled }: MetadataGenerationStepProps) {
   const [videoSummary, setVideoSummary] = useState('');
-  const [title, setTitle] = useState(initialMetadata?.title || '');
-  const [description, setDescription] = useState(initialMetadata?.description || '');
-  const [tags, setTags] = useState<string[]>(initialMetadata?.tags || []);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [currentTag, setCurrentTag] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (initialMetadata) {
+      setTitle(initialMetadata.title);
+      setDescription(initialMetadata.description);
+      setTags(initialMetadata.tags);
+      if (initialMetadata.title || initialMetadata.description || initialMetadata.tags.length > 0) {
+        setHasGeneratedOnce(true); // If there's initial data, assume it was generated
+      }
+    } else {
+      // Reset if initialMetadata becomes null (e.g. flow reset)
+      setTitle('');
+      setDescription('');
+      setTags([]);
+      setHasGeneratedOnce(false);
+    }
+  }, [initialMetadata]);
+
+
   const handleGenerateMetadata = async () => {
-    if (!videoFile) {
+    if (!videoFile && !videoFileDetails) { // Check both actual file and details
       toast({
         title: 'Video File Required',
         description: 'A video file must be selected to generate metadata.',
@@ -48,10 +69,19 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
       });
       return;
     }
+    if (!videoFile && videoFileDetails) { // File object lost, but details exist
+       toast({
+        title: 'Video File Lost',
+        description: `The video file "${videoFileDetails.name}" needs to be re-selected. Please go to Step 1.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
-      const videoDataUri = await fileToDataUri(videoFile);
+      // videoFile is checked above, so it must exist here
+      const videoDataUri = await fileToDataUri(videoFile!); 
       const result = await generateVideoMetadata({ 
         videoDataUri, 
         videoDescription: videoSummary.trim() || undefined 
@@ -59,9 +89,10 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
       setTitle(result.title);
       setDescription(result.description);
       setTags(result.tags);
+      setHasGeneratedOnce(true);
       toast({
-        title: 'Metadata Generated',
-        description: 'AI has generated title, description, and tags based on your video content.',
+        title: hasGeneratedOnce ? 'Metadata Re-generated' : 'Metadata Generated',
+        description: 'AI has processed your video content.',
       });
     } catch (error) {
       console.error('Error generating metadata:', error);
@@ -97,17 +128,33 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
     }
     onMetadataGenerated({ title, description, tags });
   };
+  
+  const canGenerate = !!(videoFile || videoFileDetails);
+  const videoObjectMissing = !videoFile && !!videoFileDetails;
 
   return (
     <Card className="w-full shadow-lg">
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Wand2 className="h-6 w-6 text-accent" />
-          <CardTitle>Step 3: Generate Metadata</CardTitle>
+          {hasGeneratedOnce ? <Edit3 className="h-6 w-6 text-accent" /> : <Wand2 className="h-6 w-6 text-accent" />}
+          <CardTitle>{hasGeneratedOnce ? 'Step 3: Review & Edit Metadata' : 'Step 3: Generate Metadata'}</CardTitle>
         </div>
-        <CardDescription>The AI will analyze your video content. You can optionally add a summary to provide more context, then review or edit the generated metadata.</CardDescription>
+        <CardDescription>
+          {hasGeneratedOnce 
+            ? 'Review, edit, or re-generate the AI-powered metadata for your video.'
+            : 'The AI will analyze your video content. Optionally add a summary for more context.'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {videoObjectMissing && (
+          <Alert variant="warning" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Video File Action Required</AlertTitle>
+            <AlertDescription>
+              The video file ({videoFileDetails?.name}) needs to be re-selected at Step 1 to enable AI generation. Your previous metadata (if any) is shown below for editing.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="space-y-2">
           <Label htmlFor="video-summary">Video Content Summary (Optional)</Label>
           <Textarea
@@ -124,12 +171,12 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
         </div>
         <Button 
           onClick={handleGenerateMetadata} 
-          disabled={disabled || isLoading || !videoFile} 
+          disabled={disabled || isLoading || !canGenerate || videoObjectMissing} 
           className="w-full sm:w-auto"
-          aria-label={!videoFile ? "Upload a video first to enable metadata generation" : "Generate metadata with AI"}
+          aria-label={!canGenerate ? "Upload a video first to enable metadata generation" : (videoObjectMissing ? "Video file needs re-selection" : (hasGeneratedOnce ? "Re-generate metadata with AI" : "Generate metadata with AI"))}
         >
-          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-          Generate with AI
+          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (hasGeneratedOnce ? <RotateCcw className="mr-2 h-4 w-4" /> : <Wand2 className="mr-2 h-4 w-4" />)}
+          {hasGeneratedOnce ? 'Re-generate with AI' : 'Generate with AI'}
         </Button>
         
         <div className="space-y-4 pt-4 border-t">
@@ -165,7 +212,7 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
                 </Badge>
               ))}
             </div>
-             {tags.length === 0 && <p className="text-sm text-muted-foreground">No tags added yet. AI will generate these.</p>}
+             {tags.length === 0 && <p className="text-sm text-muted-foreground">No tags added yet. AI can generate these, or you can add them manually.</p>}
           </div>
         </div>
       </CardContent>
@@ -177,4 +224,3 @@ export default function MetadataGenerationStep({ videoFile, onMetadataGenerated,
     </Card>
   );
 }
-
